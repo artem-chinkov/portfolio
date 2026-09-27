@@ -1,0 +1,13 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example
+*.log
+.cache/
+tmp/
+PROMT.MD
+LINKS.MD
+scripts/github-release.mjs
