@@ -53,7 +53,7 @@ export const content: Record<Lang, Content> = {
     about: ['Соединяю продуктовый менеджмент, UX/UI, разработку с AI и гейм-дизайн. Работал над мобильными приложениями, образовательными продуктами, играми в Сбере, МТС, VK, БКС.', 'По образованию я психолог, выпускник МГУ. Этот опыт помогает учитывать мотивацию пользователей.'],
     stats: [
       { title: '15% MAU · +10% пополнения · +3 п.п. Aha', body: 'Результаты в БКС: 15% MAU вовлечены в геймификацию; средняя сумма пополнения выросла на 10% к предыдущему периоду; Aha-конверсия выросла с 15% до 18%.', icon: 'bcs' },
-      { title: '1 месяц', body: 'Заняла разработка с помощью AI веб-версии инвестиционного интерактива «Финворды».', icon: 'bcs' },
+      { title: '300+ тысяч абонентов', body: 'Привлёк тариф + приложение «Прогрессоры» от МТС.', icon: 'mts' },
       { title: '3 млн+ прохождений', body: 'У каждого из двух тренажёров VK «Урок цифры».', icon: 'vk' },
       { title: '8 гейм-дизайнеров', body: 'Команда, которой я руководил в Сбере.', icon: 'sber' },
     ],
@@ -82,7 +82,7 @@ export const content: Record<Lang, Content> = {
     about: ['I combine product management, UX/UI, AI-assisted development, and game design. I have worked on mobile apps, educational products, and games at Sber, MTS, VK, and BCS.', 'I am a psychology graduate of Moscow State University. This background helps me account for user motivation.'],
     stats: [
       { title: '15% MAU · +10% top-ups · +3 pp Aha', body: 'Results at BCS: 15% of monthly active users engaged with gamification; the average top-up amount increased by 10% compared with the previous period; Aha conversion increased from 15% to 18%.', icon: 'bcs' },
-      { title: '1 month', body: 'To build the web version of the investment-themed interactive Finwords with AI assistance.', icon: 'bcs' },
+      { title: '300K+ subscribers', body: 'Attracted by the MTS Progressors mobile plan + app.', icon: 'mts' },
       { title: '3M+ completions', body: 'For each of the two VK Digital Lesson learning simulators.', icon: 'vk' },
       { title: '8 game designers', body: 'The team I led at Sber.', icon: 'sber' },
     ],

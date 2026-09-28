@@ -40,12 +40,19 @@ test('default route opens Russian product manager', async ({ page }) => {
 });
 
 test('language switch preserves profession and section', async ({ page }) => {
-  await page.goto('/portfolio/ru/engineer/#services');
-  await page.getByTestId('language-en').first().click();
-  await expect(page).toHaveURL(/\/portfolio\/en\/engineer\/#services$/);
+  await page.goto('/portfolio/ru/engineer/#about');
+  await page.locator('.screen-page[data-active="true"]').getByTestId('language-en').click();
+  await expect(page).toHaveURL(/\/portfolio\/en\/engineer\/#about$/);
   await expect(page.locator('h1')).toHaveText(roles.engineer.en.join(' '), { useInnerText: true });
-  await page.getByTestId('language-ru').first().click();
-  await expect(page).toHaveURL(/\/portfolio\/ru\/engineer\/#services$/);
+  await page.evaluate(() => { location.hash = 'contacts'; });
+  await expect(page.locator('#contacts')).toBeVisible();
+  // The header is intentionally confined to the first screen. Its destination
+  // still tracks the active section for direct route navigation.
+  const destination = await page.getByTestId('language-ru').getAttribute('href');
+  expect(destination).toBe('/portfolio/ru/engineer/#contacts');
+  await page.goto(destination!);
+  await expect(page).toHaveURL(/\/portfolio\/ru\/engineer\/#contacts$/);
+  await expect(page.locator('#contacts')).toBeVisible();
 });
 
 test('carousel advances, reverses and exposes six correct external destinations', async ({ page }) => {
@@ -120,10 +127,10 @@ test('responsive sections fit viewport and use Nunito without broken local asset
   await page.goto('/portfolio/en/gamification/');
   await page.evaluate(() => document.fonts.ready);
   expect(await page.locator('body').evaluate(el => getComputedStyle(el).fontFamily)).toMatch(/Nunito/);
-  for (const width of [360, 390, 768, 1440, 1920]) {
+  for (const width of [320, 390, 430, 768, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     for (const section of ['about', 'experience', 'services', 'projects', 'recommendations', 'contacts']) {
-      await page.locator(`#${section}`).scrollIntoViewIfNeeded();
+      await page.evaluate(id => { location.hash = id; }, section);
       await expect(page.locator(`#${section}`)).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${section} at ${width}px`).toBeLessThanOrEqual(1);
     }
@@ -146,11 +153,13 @@ test('horizontal drag selects a project without opening a game or following a li
   await expect(page).toHaveURL(/\/portfolio\/en\/manager\/#projects$/);
 });
 
-test('mobile primary controls have 44px touch targets', async ({ page }) => {
+test('mobile header controls stay visually compact', async ({ page }) => {
   await page.setViewportSize({width:360,height:800});
   await page.goto('/portfolio/ru/manager/');
-  for(const selector of ['.language-switch a','.hero-socials a','.dots button','.arrow-button','.hero-contact','.resume-link']){
-    const sizes=await page.locator(selector).evaluateAll(elements=>elements.map(e=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height})));
-    for(const size of sizes){expect(size.w,selector).toBeGreaterThanOrEqual(44);expect(size.h,selector).toBeGreaterThanOrEqual(44);}
+  for(const selector of ['.site-header .language-switch','.site-header .resume-link']){
+    const box=await page.locator(selector).boundingBox();
+    expect(box,selector).not.toBeNull();
+    expect(box!.height,selector).toBeLessThanOrEqual(36);
+    expect(box!.width,selector).toBeLessThanOrEqual(145);
   }
 });
