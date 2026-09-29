@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { content, email, projects, roles, type Lang, type Role } from '../src/content';
+import { carouselSettled, carouselStep, settled } from './helpers';
 
 const pathFor = (lang: Lang, role: Role) => `/portfolio/${lang}/${role}/`;
 
@@ -14,6 +15,7 @@ for (const lang of ['ru', 'en'] as const) {
       expect(html).toMatch(/<meta[^>]*name=["']description["'][^>]*>/);
       expect(html).toContain(`https://artem-chinkov.github.io${path}`);
       await page.goto(path);
+      await settled(page);
       await expect(page.locator('h1')).toHaveText(roles[role][lang].join(' '), { useInnerText: true });
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://artem-chinkov.github.io${path}`);
       const preview = await page.locator('meta[property="og:image"]').getAttribute('content');
@@ -41,11 +43,13 @@ test('default route opens Russian product manager', async ({ page }) => {
 
 test('language switch preserves profession and section', async ({ page }) => {
   await page.goto('/portfolio/ru/engineer/#about');
+  await settled(page);
   await page.locator('.screen-page[data-active="true"]').getByTestId('language-en').click();
   await expect(page).toHaveURL(/\/portfolio\/en\/engineer\/#about$/);
   await expect(page.locator('h1')).toHaveText(roles.engineer.en.join(' '), { useInnerText: true });
   await page.evaluate(() => { location.hash = 'contacts'; });
   await expect(page.locator('#contacts')).toBeVisible();
+  await settled(page);
   // The header is intentionally confined to the first screen. Its destination
   // still tracks the active section for direct route navigation.
   const destination = await page.getByTestId('language-ru').getAttribute('href');
@@ -56,16 +60,19 @@ test('language switch preserves profession and section', async ({ page }) => {
 });
 
 test('carousel advances, reverses and exposes six correct external destinations', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.goto('/portfolio/ru/manager/#projects');
+  await settled(page);
   const cards = page.getByTestId('project-card');
   await expect(cards).toHaveCount(6);
   await expect(cards.nth(0)).toHaveAttribute('aria-current', 'true');
-  await page.getByTestId('next-project').click();
+  await carouselStep(page, 'next');
   await expect(cards.nth(1)).toHaveAttribute('aria-current', 'true');
-  await page.getByTestId('previous-project').click();
+  await carouselStep(page, 'previous');
   await expect(cards.nth(0)).toHaveAttribute('aria-current', 'true');
   for (const [index, project] of projects.entries()) {
     await page.getByTestId(`project-dot-${index}`).click();
+    await carouselSettled(page);
     await expect(cards.nth(index)).toHaveAttribute('aria-current', 'true');
     const link = cards.nth(index).locator(`a[href="${project.href}"]`);
     await expect(link).toBeVisible();
@@ -76,15 +83,18 @@ test('carousel advances, reverses and exposes six correct external destinations'
 });
 
 test('interactive projects open isolated dialogs, trap keyboard focus and restore it', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.route('**/*', async route => {
     if (new URL(route.request().url()).hostname !== '127.0.0.1') {
       await route.fulfill({ contentType: 'text/html', body: '<!doctype html><html lang="en"><title>Interactive preview</title><body>Preview</body></html>' });
     } else await route.continue();
   });
   await page.goto('/portfolio/en/manager/#projects');
+  await settled(page);
   for (const [index, project] of projects.entries()) {
     if (!project.game) continue;
     await page.getByTestId(`project-dot-${index}`).click();
+    await carouselSettled(page);
     const opener = page.getByTestId(`play-${project.id}`);
     await opener.click();
     const dialog = page.getByRole('dialog');
@@ -120,6 +130,7 @@ for (const succeeds of [true, false]) {
 }
 
 test('responsive sections fit viewport and use Nunito without broken local assets', async ({ page }) => {
+  test.setTimeout(180_000);
   const failedAssets: string[] = [];
   page.on('response', response => {
     if (response.url().startsWith('http://127.0.0.1:4173/') && response.status() >= 400) failedAssets.push(`${response.status()} ${response.url()}`);
@@ -131,7 +142,9 @@ test('responsive sections fit viewport and use Nunito without broken local asset
     await page.setViewportSize({ width, height: 900 });
     for (const section of ['about', 'experience', 'services', 'projects', 'recommendations', 'contacts']) {
       await page.evaluate(id => { location.hash = id; }, section);
+      await expect.poll(() => page.locator(`#${section}`).evaluate(el => el.closest('.screen-page')?.getAttribute('data-active'))).toBe('true');
       await expect(page.locator(`#${section}`)).toBeVisible();
+      await settled(page);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${section} at ${width}px`).toBeLessThanOrEqual(1);
     }
   }
@@ -141,6 +154,7 @@ test('responsive sections fit viewport and use Nunito without broken local asset
 
 test('horizontal drag selects a project without opening a game or following a link', async ({ page }) => {
   await page.goto('/portfolio/en/manager/#projects');
+  await settled(page);
   const preview=page.getByTestId('play-yacht');
   const box=await preview.boundingBox();
   expect(box).toBeTruthy();
@@ -156,6 +170,7 @@ test('horizontal drag selects a project without opening a game or following a li
 test('mobile header controls stay visually compact', async ({ page }) => {
   await page.setViewportSize({width:360,height:800});
   await page.goto('/portfolio/ru/manager/');
+  await settled(page);
   for(const selector of ['.site-header .language-switch','.site-header .resume-link']){
     const box=await page.locator(selector).boundingBox();
     expect(box,selector).not.toBeNull();

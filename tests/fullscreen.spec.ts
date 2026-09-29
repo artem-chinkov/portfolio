@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { carouselSettled, carouselStep } from './helpers';
 
 test.use({ reducedMotion: 'no-preference' });
 
@@ -40,7 +41,7 @@ async function expectOneLineNavigation(page: Page, selector: string) {
 }
 
 test('first screen includes the header and both navigation bars stay on one line', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   for (const lang of ['ru', 'en']) {
     await page.goto(`/portfolio/${lang}/gamification/#about`);
     for (const width of [320, 390, 430]) {
@@ -94,11 +95,10 @@ test('intro brings portrait, copy and actions from their designated edges before
 });
 
 test('every screen fits and centers after resizing, including short landscape windows', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000);
   await page.goto('/portfolio/en/gamification/');
   await page.evaluate(() => document.fonts.ready);
-  // Exercise fitting without waiting for a transition at every viewport combination.
-  // The other tests in this file validate the animated transition itself.
+  // System preferences must not change fitting or skip the animated transition.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 430, height: 700 }, { width: 768, height: 900 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport);
@@ -109,15 +109,19 @@ test('every screen fits and centers after resizing, including short landscape wi
         if (!box) return false;
         return box.x >= -1 && box.y >= -1 && box.x + box.width <= viewport.width + 1 && box.y + box.height <= viewport.height + 1;
       }, { message: `${id} must fit ${viewport.width} × ${viewport.height}` }).toBe(true);
-      const box = await activePage(page).locator('.screen-content').boundingBox();
-      expect(Math.abs(box!.y + box!.height / 2 - viewport.height / 2), `${id} vertical center`).toBeLessThanOrEqual(3);
-      expect(await page.evaluate(() => window.scrollY)).toBe(0);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+      const geometry = await activePage(page).locator('.screen-content').evaluate(el => {
+        const box = el.getBoundingClientRect();
+        return { center: box.y + box.height / 2, scroll: window.scrollY, overflow: document.documentElement.scrollWidth - innerWidth,
+          cards: [...el.querySelectorAll('.info-card')].map(card => {
+            const rect = card.getBoundingClientRect();
+            return { width: rect.width, height: rect.height, overflow: card.scrollHeight - card.clientHeight };
+          }) };
+      });
+      expect(Math.abs(geometry.center - viewport.height / 2), `${id} vertical center`).toBeLessThanOrEqual(3);
+      expect(geometry.scroll).toBe(0);
+      expect(geometry.overflow).toBeLessThanOrEqual(1);
       if (id === 'experience' || id === 'services') {
-        const cards = await activePage(page).locator('.info-card').evaluateAll(nodes => nodes.map(el => {
-          const rect = el.getBoundingClientRect();
-          return { width: rect.width, height: rect.height, overflow: el.scrollHeight - el.clientHeight };
-        }));
+        const cards = geometry.cards;
         expect(cards).toHaveLength(4);
         for (const card of cards) {
           expect(Math.abs(card.width - card.height), `${id}: square card`).toBeLessThanOrEqual(1);
@@ -140,7 +144,7 @@ test('wheel inertia advances one screen and navigation remains reversible', asyn
   }
   await expect(page.locator('.screen-stage')).toHaveAttribute('data-active-screen', 'experience');
   await settled(page);
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(850);
   await expect(page.locator('.screen-stage')).toHaveAttribute('data-active-screen', 'experience');
   await page.keyboard.press('PageDown');
   await expect(page.locator('.screen-stage')).toHaveAttribute('data-active-screen', 'services');
@@ -255,7 +259,7 @@ test('reduced motion preserves discrete screens and excludes inactive controls f
   await page.keyboard.press('PageDown');
   await expect(page.locator('.screen-stage')).toHaveAttribute('data-active-screen', 'projects');
   await settled(page);
-  await page.getByTestId('next-project').focus();
+  await page.getByTestId('project-dot-0').focus();
   for (let i = 0; i < 12; i++) {
     await page.keyboard.press('Tab');
     expect(await page.evaluate(() => {
@@ -269,7 +273,7 @@ test('reduced motion preserves discrete screens and excludes inactive controls f
 test('carousel wrap never carries an unrelated card through the center', async ({ page }) => {
   await page.goto('/portfolio/en/manager/#projects');
   await settled(page);
-  await page.getByTestId('next-project').click();
+  await carouselStep(page, 'next', false);
   const samples = await page.evaluate(async () => {
     const unrelated = [...document.querySelectorAll<HTMLElement>('[data-testid="project-card"]')].slice(2);
     const badFrames: string[] = [];
@@ -290,9 +294,9 @@ test('carousel wrap never carries an unrelated card through the center', async (
   expect(samples).toEqual([]);
   await expect(page.getByTestId('project-card').nth(1)).toHaveAttribute('aria-current', 'true');
   await expect(page.getByTestId('carousel')).toHaveAttribute('data-moving', 'false');
-  await page.getByTestId('previous-project').click();
+  await carouselStep(page, 'previous');
   await expect(page.getByTestId('carousel')).toHaveAttribute('data-moving', 'false');
-  await page.getByTestId('previous-project').click();
+  await carouselStep(page, 'previous');
   await expect(page.getByTestId('project-card').nth(5)).toHaveAttribute('aria-current', 'true');
   await expect(page.getByTestId('carousel')).toHaveAttribute('data-moving', 'false');
   await expect(page.locator('.screen-stage')).toHaveAttribute('data-active-screen', 'projects');
@@ -305,7 +309,10 @@ test('horizontal swipe stays in projects and rapid clicks cannot open an acciden
   await expect(page.getByTestId('project-card').nth(1)).toHaveAttribute('aria-current', 'true');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.screen-stage')).toHaveAttribute('data-active-screen', 'projects');
-  for (let i = 0; i < 4; i++) await page.getByTestId('next-project').click({ force: true });
+  for (let i = 0; i < 4; i++) {
+    if (page.viewportSize()!.width >= 768) await page.getByTestId('next-project').click({ force: true });
+    else await page.getByTestId('project-dot-0').press('ArrowRight');
+  }
   await expect(page.getByTestId('carousel')).toHaveAttribute('data-moving', 'false');
   await expect(page.locator('[data-testid="project-card"][aria-current="true"]')).toHaveCount(1);
   await expect(page.getByRole('dialog')).toHaveCount(0);

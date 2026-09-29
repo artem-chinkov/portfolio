@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import { content, roles, socials, email, recommendationsUrl, type Lang, type Role, type Project } from './content';
 import { ProjectCarousel } from './ProjectCarousel';
-import { Screen, sectionIds, useScreens, useReducedMotion, type SectionId } from './screens';
+import { Screen, sectionIds, useScreens, type SectionId } from './screens';
 
 const base = '/portfolio/';
 const asset = (name: string, folder = 'images') => base + 'assets/' + folder + '/' + name;
@@ -44,7 +44,7 @@ function GameDialog({ project, lang, onClose }: { project: Project; lang: Lang; 
     d?.showModal(); document.body.style.overflow='hidden';
     return ()=>{clearTimeout(timer.current);d?.close();document.body.style.overflow=prior;opener?.focus({preventScroll:true});};
   },[]);
-  function close(){if(closing)return;setClosing(true);timer.current=setTimeout(onClose,matchMedia('(prefers-reduced-motion: reduce)').matches?0:300);}
+  function close(){if(closing)return;setClosing(true);timer.current=setTimeout(onClose,300);}
   return <dialog ref={ref} className={`game-dialog ${closing?'closing':''}`} aria-labelledby="game-title" onCancel={e=>{e.preventDefault();close();}} onClick={e=>{if(e.target===e.currentTarget)close();}} onKeyDown={e=>{
     if(e.key!=='Tab')return;
     const focusable=e.currentTarget.querySelectorAll<HTMLElement>('button, iframe, a[href]');
@@ -66,9 +66,8 @@ export function App({lang,role}: {lang:Lang;role:Role}) {
   const [toast,setToast]=useState<{error:boolean}|null>(null);
   const toastTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
   const screens=useScreens(!!game);
-  const reduced=useReducedMotion();
   useEffect(()=>()=>clearTimeout(toastTimer.current),[]);
-  const enter={type:'spring' as const,duration:reduced?0:1.2,bounce:.08};
+  const enter={type:'spring' as const,duration:1.2,bounce:.08};
   const screenProps={activeIndex:screens.activeIndex,sceneScale:screens.sceneScale,viewportHeight:screens.viewportHeight,showNeighbors:screens.showNeighbors,intro:screens.intro,ready:screens.ready};
   async function copyEmail(){
     try{await navigator.clipboard.writeText(email);setToast({error:false});}catch{setToast({error:true});}
@@ -76,7 +75,7 @@ export function App({lang,role}: {lang:Lang;role:Role}) {
   }
   const resume=<a className="button resume-link" href={asset(roles[role].resume,'resumes')} download>{t.download}</a>;
   const contacts=<section id="contacts" className="contacts-section" aria-labelledby="contacts-title"><Heading id="contacts-title">{t.contactsTitle}</Heading><p>{t.contactsDescription}</p><SocialLinks lang={lang}/><a className="email" href={'mailto:'+email}>{email}</a><button className="button" data-testid="copy-email" onClick={()=>void copyEmail()}>{t.copy}</button></section>;
-  const footer=<footer><div className="footer-content"><a className="back-to-top" href="#about" aria-label={lang==='ru'?'Наверх':'Back to top'}><img src={asset('up-arrow.svg')} alt=""/></a><Navigation lang={lang} footer/></div><div className="copyright">2026</div></footer>;
+  const footer=<footer><div className="footer-content"><a className="back-to-top" href="#about" aria-label={lang==='ru'?'Наверх':'Back to top'}><span className="back-to-top-visual"><img src={asset('up-arrow.svg')} alt=""/></span></a><Navigation lang={lang} footer/></div><div className="copyright">2026</div></footer>;
   return <>
     <main className="screen-stage" ref={screens.stage} data-active-screen={screens.active} data-transitioning={screens.transitioning} data-intro={screens.intro} onDragStart={e=>e.preventDefault()}>
       <a className="skip-link" href="#about">{lang==='ru'?'К содержимому':'Skip to content'}</a>
@@ -84,10 +83,10 @@ export function App({lang,role}: {lang:Lang;role:Role}) {
         <div className="about-layout">
           <header className="site-header"><LanguageSwitch lang={lang} role={role} section={screens.section}/><Navigation lang={lang}/>{resume}</header>
           <section id="about" className="hero" aria-labelledby="hero-title">
-            <motion.div className="hero-copy" initial={reduced?false:{x:'-100vw'}} animate={{x:0}} transition={enter}><p className="greeting">{t.greeting}</p><p className="name">{t.name}</p><h1 id="hero-title" tabIndex={-1}>{roles[role][lang].map(line=><span key={line}>{line}</span>)}</h1><ul className="bio">{t.about.map(p=><li key={p}>{p}</li>)}</ul></motion.div>
-            <motion.div className="portrait" initial={reduced?false:{x:'100vw'}} animate={{x:0}} transition={enter}><img src={asset('portrait.png')} alt={t.name} width="486" height="590" fetchPriority="high"/></motion.div>
-            <motion.div className="hero-contact" initial={reduced?false:{y:'100vh'}} animate={{y:0}} transition={enter}><a className="button" href={socials[0].href} target="_blank" rel="noopener noreferrer">{t.contact}</a></motion.div>
-            <motion.div className="hero-socials" initial={reduced?false:{y:'100vh'}} animate={{y:0}} transition={enter}><SocialLinks lang={lang}/></motion.div>
+            <motion.div className="hero-copy" initial={{x:'-100vw'}} animate={{x:0}} transition={enter}><p className="greeting">{t.greeting}</p><p className="name">{t.name}</p><h1 id="hero-title" tabIndex={-1}>{roles[role][lang].map(line=><span key={line}>{line}</span>)}</h1><ul className="bio">{t.about.map(p=><li key={p}>{p}</li>)}</ul></motion.div>
+            <motion.div className="portrait" initial={{x:'100vw'}} animate={{x:0}} transition={enter}><img src={asset('portrait.png')} alt={t.name} width="486" height="590" fetchPriority="high"/></motion.div>
+            <motion.div className="hero-contact" initial={{y:'100vh'}} animate={{y:0}} transition={enter}><a className="button" href={socials[0].href} target="_blank" rel="noopener noreferrer">{t.contact}</a></motion.div>
+            <motion.div className="hero-socials" initial={{y:'100vh'}} animate={{y:0}} transition={enter}><SocialLinks lang={lang}/></motion.div>
           </section>
         </div>
       </Screen>

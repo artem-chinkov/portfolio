@@ -1,16 +1,10 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'motion/react';
-
-const subscribeMotion = (listener: () => void) => {
-  const query = matchMedia('(prefers-reduced-motion: reduce)');
-  query.addEventListener('change', listener);
-  return () => query.removeEventListener('change', listener);
-};
-export const useReducedMotion = () => useSyncExternalStore(subscribeMotion, () => matchMedia('(prefers-reduced-motion: reduce)').matches, () => false);
 
 export const sectionIds = ['about', 'experience', 'services', 'projects', 'recommendations', 'contacts'] as const;
 export type SectionId = typeof sectionIds[number];
 const duration = 1.2;
+const gestureCooldown = 2000;
 const validSection = (value: string): SectionId => sectionIds.includes(value as SectionId) ? value as SectionId : 'about';
 
 export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeight = 789 }: { desktopHeight?: number; mobileHeight?: number } = {}) {
@@ -22,11 +16,10 @@ export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeigh
   const [viewportHeight, setViewportHeight] = useState(1117);
   const [sceneScale, setSceneScale] = useState(1);
   const [ready, setReady] = useState(false);
-  const reduced = useReducedMotion();
   const stage = useRef<HTMLElement>(null);
   const lockedUntil = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const wheelGesture = useRef({ last: 0, total: 0, used: false });
+  const wheelGesture = useRef({ last: 0, delta: 0, total: 0, used: false });
   const screenIds = mobile ? sectionIds.slice(0, -1) : [...sectionIds];
   const active = mobile && section === 'contacts' ? 'recommendations' : section;
   const activeIndex = screenIds.indexOf(active);
@@ -42,8 +35,8 @@ export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeigh
     const changesScreen = next !== active;
     if (changesScreen || instant) {
       clearTimeout(timer.current);
-      const ms = reduced || instant ? 0 : duration * 1000;
-      lockedUntil.current = performance.now() + ms;
+      const ms = instant ? 0 : duration * 1000;
+      lockedUntil.current = performance.now() + (instant ? 0 : gestureCooldown);
       setTransitioning(ms > 0);
       if (ms) timer.current = setTimeout(() => setTransitioning(false), ms);
     }
@@ -51,7 +44,7 @@ export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeigh
       const heading = document.querySelector<HTMLElement>(`#${id} h1, #${id} h2`);
       heading?.focus({ preventScroll: true });
     });
-  }, [active, blocked, mobile, reduced]);
+  }, [active, blocked, mobile]);
 
   useEffect(() => {
     const query = matchMedia('(max-width: 767px)');
@@ -76,39 +69,50 @@ export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeigh
   }, [desktopHeight, mobileHeight]);
 
   useEffect(() => {
-    if (reduced || validSection(location.hash.slice(1)) !== 'about') {
+    if (validSection(location.hash.slice(1)) !== 'about') {
       setIntro(false);
       setShowNeighbors(true);
-      if (reduced) { clearTimeout(timer.current); lockedUntil.current = 0; setTransitioning(false); }
       return;
     }
     const reveal = setTimeout(() => setShowNeighbors(true), 1200);
     const finish = setTimeout(() => setIntro(false), 2000);
     return () => { clearTimeout(reveal); clearTimeout(finish); };
-  }, [reduced]);
+  }, []);
 
   useEffect(() => {
     const root = stage.current;
     if (!root) return;
     const step = (direction: number) => {
-      if (blocked || performance.now() < lockedUntil.current) return;
+      if (blocked || performance.now() < lockedUntil.current) return false;
       const target = screenIds[Math.max(0, Math.min(screenIds.length - 1, activeIndex + direction))];
-      if (target !== active) navigate(target);
+      if (target === active) return false;
+      navigate(target);
+      return true;
     };
     const wheel = (e: WheelEvent) => {
       if (blocked || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       e.preventDefault();
       const now = performance.now();
       const gesture = wheelGesture.current;
-      if (now - gesture.last > 220) { gesture.total = 0; gesture.used = false; }
+      const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? viewportHeight : 1);
+      const reversed = delta * gesture.total < 0 && now >= lockedUntil.current;
+      const gap = now - gesture.last;
+      // Slow rendering can space out a decaying trackpad tail beyond the quiet gap.
+      // A fresh gesture after a pause or a direction change can move again once unlocked.
+      const decayingTail = gesture.used && delta * gesture.delta > 0 && Math.abs(delta) < Math.abs(gesture.delta) && gap < 900;
+      const freshAfterPause = gap > 160 && !decayingTail;
+      if (freshAfterPause || reversed) { gesture.total = 0; gesture.used = false; }
       gesture.last = now;
-      if (gesture.used || now < lockedUntil.current) { gesture.used = true; return; }
-      gesture.total += e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
-      if (Math.abs(gesture.total) >= 45) { gesture.used = true; step(Math.sign(gesture.total)); }
+      gesture.delta = delta;
+      // Drop blocked gestures, including any tail that continues after the cooldown.
+      if (now < lockedUntil.current) { gesture.total = delta; gesture.used = true; return; }
+      if (gesture.used) return;
+      gesture.total += delta;
+      if (Math.abs(gesture.total) >= 12) gesture.used = step(Math.sign(gesture.total));
     };
     let pointer: { x: number; y: number; id: number } | null = null;
     let suppressClickUntil = 0;
-    const down = (e: PointerEvent) => { if (!blocked && e.isPrimary && e.button === 0) pointer = { x: e.clientX, y: e.clientY, id: e.pointerId }; };
+    const down = (e: PointerEvent) => { if (!blocked && performance.now() >= lockedUntil.current && e.isPrimary && e.button === 0) pointer = { x: e.clientX, y: e.clientY, id: e.pointerId }; };
     const up = (e: PointerEvent) => {
       const start = pointer; pointer = null;
       if (!start || start.id !== e.pointerId) return;
@@ -147,7 +151,7 @@ export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeigh
       root.removeEventListener('wheel', wheel); root.removeEventListener('pointerdown', down); root.removeEventListener('pointerup', up); root.removeEventListener('pointercancel', cancel); root.removeEventListener('click', click, true);
       document.removeEventListener('keydown', key); window.removeEventListener('popstate', hash); window.removeEventListener('hashchange', hash);
     };
-  }, [active, activeIndex, blocked, mobile, navigate]);
+  }, [active, activeIndex, blocked, mobile, navigate, viewportHeight]);
 
   return { mobile, section, active, activeIndex, screenIds, transitioning, stage, navigate, intro, showNeighbors, sceneScale, viewportHeight, ready };
 }
@@ -157,7 +161,6 @@ export function Screen({ id, index, activeIndex, children, sceneScale = 1, viewp
   const content = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
   const [activeHeight, setActiveHeight] = useState(0);
-  const reduced = useReducedMotion();
   const active = index === activeIndex;
   useEffect(() => {
     const fit = () => {
@@ -182,7 +185,7 @@ export function Screen({ id, index, activeIndex, children, sceneScale = 1, viewp
   const visibleNeighbor = showNeighbors && Math.abs(distance) === 1;
   return <motion.div className="screen-page" data-screen={id} data-active={active} aria-hidden={!active} inert={!active}
     initial={false} animate={{ y, opacity: active ? 1 : visibleNeighbor ? .2 : 0, scale: active ? 1 : .75 }}
-    transition={reduced || !ready ? { duration: 0 } : { type: 'spring', duration, bounce: .08, opacity: { duration: intro ? .8 : duration } }}>
+    transition={!ready ? { duration: 0 } : { type: 'spring', duration, bounce: .08, opacity: { duration: intro ? .8 : duration } }}>
     <div className="screen-fit" ref={box}><div className="screen-content" ref={content} style={{ '--screen-scale': sceneScale } as CSSProperties}>{children}</div></div>
   </motion.div>;
 }
