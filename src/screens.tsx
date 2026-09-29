@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 export const sectionIds = ['about', 'experience', 'services', 'projects', 'recommendations', 'contacts'] as const;
 export type SectionId = typeof sectionIds[number];
 const duration = 1.2;
-const gestureCooldown = 2000;
+const gestureCooldown = duration * 1000;
 const validSection = (value: string): SectionId => sectionIds.includes(value as SectionId) ? value as SectionId : 'about';
 
 export function useScreens(blocked: boolean, { desktopHeight = 1117, mobileHeight = 789 }: { desktopHeight?: number; mobileHeight?: number } = {}) {

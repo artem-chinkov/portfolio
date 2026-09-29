@@ -71,7 +71,7 @@ test('small normalized wheel input advances once despite a long inertial tail', 
   await expect(stage(page)).toHaveAttribute('data-active-screen', 'experience');
 });
 
-test('two-second vertical cooldown drops blocked wheel and swipe gestures without queuing their tails', async ({ page }) => {
+test('1200ms vertical cooldown drops blocked wheel and swipe gestures without queuing their tails', async ({ page }) => {
   await page.goto('/portfolio/en/manager/#experience');
   await settled(page);
   const snapshots = await page.evaluate(async () => {
@@ -81,22 +81,39 @@ test('two-second vertical cooldown drops blocked wheel and swipe gestures withou
     const start = performance.now();
     const until = async (time: number) => { while (performance.now() - start < time) await new Promise(resolve => setTimeout(resolve, 20)); };
     wheel();
-    await until(1350);
-    const afterAnimation = { screen: root.dataset.activeScreen, transitioning: root.dataset.transitioning };
+    await until(650);
     pointer('pointerdown', 300); pointer('pointerup', 100);
     wheel();
-    await until(1850);
+    await until(1050);
     // A swipe begun during the lock must not sneak through when released after it.
     pointer('pointerdown', 300);
     for (let i = 0; i < 7; i++) { wheel(); await new Promise(resolve => setTimeout(resolve, 100)); }
     pointer('pointerup', 100);
-    await until(2700);
+    await until(1900);
+    const afterAnimation = { screen: root.dataset.activeScreen, transitioning: root.dataset.transitioning };
     return { afterAnimation, afterTail: root.dataset.activeScreen };
   });
   expect(snapshots).toEqual({ afterAnimation: { screen: 'services', transitioning: 'false' }, afterTail: 'services' });
   // A genuinely new gesture after the cooldown is accepted.
   await page.waitForTimeout(200);
   await stage(page).dispatchEvent('wheel', { deltaY: 12, bubbles: true, cancelable: true });
+  await expect(stage(page)).toHaveAttribute('data-active-screen', 'projects');
+  await settled(page);
+});
+
+test('a new vertical gesture is accepted 1350ms after the previous gesture', async ({ page }) => {
+  await page.goto('/portfolio/en/manager/#experience');
+  await settled(page);
+  const beforeSecondGesture = await page.evaluate(async () => {
+    const root = document.querySelector<HTMLElement>('.screen-stage')!;
+    const wheel = () => root.dispatchEvent(new WheelEvent('wheel', { deltaY: 12, bubbles: true, cancelable: true }));
+    wheel();
+    await new Promise(resolve => setTimeout(resolve, 1350));
+    const snapshot = { screen: root.dataset.activeScreen, transitioning: root.dataset.transitioning };
+    wheel();
+    return snapshot;
+  });
+  expect(beforeSecondGesture).toEqual({ screen: 'services', transitioning: 'false' });
   await expect(stage(page)).toHaveAttribute('data-active-screen', 'projects');
   await settled(page);
 });
