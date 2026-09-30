@@ -1,11 +1,11 @@
 export type Lang = 'ru' | 'en';
 export type Role = 'manager' | 'designer' | 'engineer' | 'gamification';
 
-export const roles: Record<Role, { ru: [string, string]; en: [string, string]; resume: string }> = {
-  manager: { ru: ['Менеджер', 'Продукта'], en: ['Product', 'Manager'], resume: 'manager.pdf' },
-  designer: { ru: ['Продуктовый', 'Дизайнер'], en: ['Product', 'Designer'], resume: 'designer.pdf' },
-  engineer: { ru: ['Инженер', 'Продукта'], en: ['Product', 'Engineer'], resume: 'engineer.pdf' },
-  gamification: { ru: ['Дизайнер', 'Геймификации'], en: ['Gamification', 'Designer'], resume: 'gamification.pdf' },
+export const roles: Record<Role, { ru: [string, string]; en: [string, string]; resume: Record<Lang, string> }> = {
+  manager: { ru: ['Менеджер', 'Продукта'], en: ['Product', 'Manager'], resume: { ru: 'manager.pdf', en: 'manager-en.pdf' } },
+  designer: { ru: ['Продуктовый', 'Дизайнер'], en: ['Product', 'Designer'], resume: { ru: 'designer.pdf', en: 'designer-en.pdf' } },
+  engineer: { ru: ['AI Инженер', 'Продукта'], en: ['AI Product', 'Engineer'], resume: { ru: 'engineer.pdf', en: 'engineer-en.pdf' } },
+  gamification: { ru: ['Гейм-Дизайнер', '(Геймификация)'], en: ['Game Designer', '(Gamification)'], resume: { ru: 'gamification.pdf', en: 'gamification-en.pdf' } },
 };
 
 type Card = { title: string; body: string; icon: string };
@@ -55,7 +55,7 @@ export const content: Record<Lang, Content> = {
       { title: '15% MAU · +10% пополнения · +3 п.п. Aha', body: 'Результаты в БКС: 15% MAU вовлечены в геймификацию; средняя сумма пополнения выросла на 10% к предыдущему периоду; Aha-конверсия выросла с 15% до 18%.', icon: 'bcs' },
       { title: '300+ тысяч абонентов', body: 'Привлекли тариф и приложение «Прогрессоры» от МТС.', icon: 'mts' },
       { title: '3 млн+ прохождений', body: 'У каждого из двух тренажёров VK «Урок цифры».', icon: 'vk' },
-      { title: '8 гейм-дизайнеров', body: 'Команда, которой я руководил в Сбере.', icon: 'sber' },
+      { title: '8 специалистов', body: 'Команда, которой я руководил в Сбере.', icon: 'sber' },
     ],
     services: [
       { title: 'Развитие продукта', body: 'Исследую потребности, формулирую гипотезы и требования, прорабатываю MVP, roadmap и бэклог. Сопровождаю запуск и анализ результатов.', icon: '💼' },
@@ -84,7 +84,7 @@ export const content: Record<Lang, Content> = {
       { title: '15% MAU · +10% top-ups · +3 pp Aha', body: 'Results at BCS: 15% of monthly active users engaged with gamification; the average top-up amount increased by 10% compared with the previous period; Aha conversion increased from 15% to 18%.', icon: 'bcs' },
       { title: '300K+ subscribers', body: 'Attracted by the MTS Progressors mobile plan and app.', icon: 'mts' },
       { title: '3M+ completions', body: 'For each of the two VK Digital Lesson learning simulators.', icon: 'vk' },
-      { title: '8 game designers', body: 'The team I led at Sber.', icon: 'sber' },
+      { title: '8 specialists', body: 'The team I led at Sber.', icon: 'sber' },
     ],
     services: [
       { title: 'Product development', body: 'I research needs, define hypotheses and requirements, and develop MVPs, roadmaps, and backlogs. I support launches and analyse results.', icon: '💼' },
@@ -120,6 +120,10 @@ export const projects: Project[] = [
 
 export const email = 'artemartem86@mail.ru';
 export const recommendationsUrl = 'https://drive.google.com/drive/folders/14A69UB_mIAChmjtHNVzPm3XFBqA-L3Z7?usp=sharing';
+export const recommendationLetters = [
+  { person: 'sytnov', href: 'https://drive.google.com/file/d/1vrNzm3OFZsI1X5Z-TzSSrq_YH0Ra7Ye_/view' },
+  { person: 'kozikov', href: 'https://drive.google.com/file/d/1ofpqDRjHSs35CvZRyGngVdXWQn9Qq_Iu/view' },
+];
 export const socials = [
   { id: 'telegram', label: 'Telegram', href: 'https://t.me/artem_chinkov', icon: 'contact_telegram.svg' },
   { id: 'max', label: 'MAX', href: 'https://max.ru/u/f9LHodD0cOKg-qsuooaS9rvNMhaSjP3EIOlnL_-ge3qNEGUWt_IKnww93to', icon: 'contact_max.svg' },

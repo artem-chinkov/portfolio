@@ -1,8 +1,19 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { content, email, projects, roles, type Lang, type Role } from '../src/content';
 import { carouselSettled, carouselStep, settled } from './helpers';
 
 const pathFor = (lang: Lang, role: Role) => `/portfolio/${lang}/${role}/`;
+const expectedHeadings: Record<Role, Record<Lang, [string, string]>> = {
+  manager: { ru: ['Менеджер', 'Продукта'], en: ['Product', 'Manager'] },
+  designer: { ru: ['Продуктовый', 'Дизайнер'], en: ['Product', 'Designer'] },
+  engineer: { ru: ['AI Инженер', 'Продукта'], en: ['AI Product', 'Engineer'] },
+  gamification: { ru: ['Гейм-Дизайнер', '(Геймификация)'], en: ['Game Designer', '(Gamification)'] },
+};
+const letterUrls = [
+  'https://drive.google.com/file/d/1vrNzm3OFZsI1X5Z-TzSSrq_YH0Ra7Ye_/view',
+  'https://drive.google.com/file/d/1ofpqDRjHSs35CvZRyGngVdXWQn9Qq_Iu/view',
+];
 
 for (const lang of ['ru', 'en'] as const) {
   for (const role of Object.keys(roles) as Role[]) {
@@ -14,9 +25,44 @@ for (const lang of ['ru', 'en'] as const) {
       expect(html).toMatch(new RegExp(`<html[^>]*lang=["']${lang}["']`));
       expect(html).toMatch(/<meta[^>]*name=["']description["'][^>]*>/);
       expect(html).toContain(`https://artem-chinkov.github.io${path}`);
+      const heading = expectedHeadings[role][lang];
+      const title = `${lang === 'ru' ? 'Артём Чинков' : 'Artem Chinkov'} — ${heading.join(' ')}`;
+      expect(html).toContain(`<title>${title}</title>`);
+      expect(html).toContain(`<meta property="og:title" content="${title}">`);
+      expect(html).toContain(`<meta name="twitter:title" content="${title}">`);
       await page.goto(path);
       await settled(page);
-      await expect(page.locator('h1')).toHaveText(roles[role][lang].join(' '), { useInnerText: true });
+      await page.evaluate(() => document.fonts.ready);
+      await expect(page.locator('h1 > span')).toHaveText(heading);
+      await expect(page).toHaveTitle(title);
+      for (const width of [320, 390, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settled(page);
+        const lines = await page.locator('h1 > span').evaluateAll(spans => spans.map(span => {
+          const range = document.createRange();
+          range.selectNodeContents(span);
+          const rects = [...range.getClientRects()];
+          return { lines: new Set(rects.map(rect => Math.round(rect.top))).size, top: rects[0].top,
+            left: Math.min(...rects.map(rect => rect.left)), right: Math.max(...rects.map(rect => rect.right)) };
+        }));
+        expect(lines.map(line => line.lines), `${lang}/${role} at ${width}px`).toEqual([1, 1]);
+        expect(lines[1].top).toBeGreaterThan(lines[0].top);
+        for (const line of lines) {
+          expect(line.left).toBeGreaterThanOrEqual(0);
+          expect(line.right).toBeLessThanOrEqual(width);
+        }
+      }
+      const portrait = page.locator('.portrait img');
+      await expect(portrait).toBeVisible();
+      await expect.poll(() => portrait.evaluate((image: HTMLImageElement) => image.naturalWidth / image.naturalHeight)).toBeCloseTo(486 / 590, 3);
+      const letters = page.locator('.letters a');
+      await expect(letters).toHaveCount(2);
+      for (const [index, url] of letterUrls.entries()) {
+        await expect(letters.nth(index)).toHaveAttribute('href', url);
+        await expect(letters.nth(index)).toHaveAttribute('target', '_blank');
+        await expect(letters.nth(index)).toHaveAttribute('rel', /noopener/);
+      }
+      await expect(page.locator('.recommendations-section > .button')).toHaveAttribute('href', 'https://drive.google.com/drive/folders/14A69UB_mIAChmjtHNVzPm3XFBqA-L3Z7?usp=sharing');
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `https://artem-chinkov.github.io${path}`);
       const preview = await page.locator('meta[property="og:image"]').getAttribute('content');
       expect(preview).toMatch(/\.png$/);
@@ -24,16 +70,39 @@ for (const lang of ['ru', 'en'] as const) {
       const previewResponse = await request.get(previewPath);
       expect(previewResponse.status()).toBe(200);
       expect(previewResponse.headers()['content-type']).toContain('image/png');
-      const cvPath = `/portfolio/assets/resumes/${role}.pdf`;
+      const cvPath = `/portfolio/assets/resumes/${roles[role].resume[lang]}`;
       await expect(page.locator(`a[href="${cvPath}"]`).first()).toBeVisible();
       const cv = await request.get(cvPath);
       expect(cv.status()).toBe(200);
-      expect((await cv.body()).subarray(0, 5).toString()).toBe('%PDF-');
+      const cvBytes = await cv.body();
+      expect(cvBytes.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(cvBytes.equals(await readFile(`public/assets/resumes/${roles[role].resume[lang]}`))).toBe(true);
+      const downloadPromise = page.waitForEvent('download');
+      await page.locator(`a[href="${cvPath}"]`).first().click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe(roles[role].resume[lang]);
+      expect((await readFile((await download.path())!)).equals(cvBytes)).toBe(true);
       await page.reload();
       await expect(page.locator('h1')).toBeVisible();
     });
   }
 }
+
+test('each letter opens its own PDF in a new tab', async ({ page, context }) => {
+  await context.route('https://drive.google.com/**', route => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><title>Recommendation PDF</title>',
+  }));
+  await page.goto('/portfolio/ru/manager/#recommendations');
+  await settled(page);
+  for (const [index, url] of letterUrls.entries()) {
+    const popupPromise = page.waitForEvent('popup');
+    await page.locator('.letters a').nth(index).click();
+    const popup = await popupPromise;
+    await expect(popup).toHaveURL(url);
+    await expect(page).toHaveURL(/\/portfolio\/ru\/manager\/#recommendations$/);
+    await popup.close();
+  }
+});
 
 test('default route opens Russian product manager', async ({ page }) => {
   await page.goto('/portfolio/');
